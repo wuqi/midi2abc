@@ -1,0 +1,235 @@
+﻿<!doctype html>
+<html lang="en">
+  
+  <head>
+    <meta charset="UTF-8">
+    <title>midi to sheet</title>
+    <script type="text/javascript" src="stream.js"></script>
+    <script type="text/javascript" src="midifile.js"></script>
+  </head>
+  
+  <body>
+    <div id="drag" style="font-size:20px;padding:25px;border:1px dashed #666;text-align:center;color:#bbb;margin-bottom:10px">将文件拖到此处</div>
+    <div id="list2"></div>
+    <script type="text/javascript">
+(function() {
+  var midiFile, synth;
+
+  function isSupportFileApi() {
+    if (window.File && window.FileList && window.FileReader && window.Blob) {
+      return true;
+    }
+    return false;
+  }
+function validnote(n)
+/* work out a step which can be expressed as a musical time */
+{
+  var v;
+
+  if (n <= 4) {
+    v = n;
+  } 
+  else {
+    v = 4;
+    while (v*2 <= n) {
+      v = v*2;
+    };
+    if (v + v/2 <= n) {
+      v = v + v/2;
+    };
+  };
+  return(v);
+}
+function hcf(m,n){//辗转相除法 求最大公约数
+	var u=+m,v=+n,t=v;
+	while(v!=0){
+		t=u%v;
+		u=v;
+		v=t;
+	}
+	return u;
+}
+  function dropHandler(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    var html = [];
+    //var notes= ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+    //var notes= ["C'","C#'","D'","D#'","E'","F'","F#'","G'","G#'","A'","A#'","B'","C","C#","D","D#","E","F","F#","G","G#","A","A#","B","1","1#","2","2#","3","4","4#","5","5#","6","6#","7","c","c#","d","d#","e","f","f#","g","g#","a","a#","b"];
+    var notes=["C'","C#'","D'","D#'","E'","F'","F#'","G'","G#'","A'","A#'","B'","C","C#","D","D#","E","F","F#","G","G#","A","A#","B","c","c#","d","d#","e","f","f#","g","g#","a","a#","b","c'","c#'","d'","d#'","e'","f'","f#'","g'","g#'","a'","a#'","b'"];
+    var files = e.dataTransfer.files;
+    for (var i = 0, len = files.length; i < len; i++) {
+      var file = files[i];
+      if (file.type != 'audio/midi' && file.type != 'audio/mid') {
+        continue;
+      }
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        midiFile = MidiFile(e.target.result);
+        //var replayer = new Replayer(midiFile, 1);
+        //var data = replayer.getData();
+        var metadata = new Object();
+        metadata.timeSigs = [];
+        metadata.keys = [];
+        metadata.ticksPerBeat = midiFile.header.ticksPerBeat;
+        metadata.trackCount = midiFile.header.trackCount;
+        metadata.microsecondsPerBeat = [];
+        metadata.title = [];
+        switch( midiFile.header.formatType){
+          case 0:
+           metadata.formatType = "single track";
+          break;
+          case 1:
+           metadata.formatType = "simultaneous tracks";
+          break;
+          case 2:
+           metadata.formatType = "independant tracks";
+          break;
+        }
+        var tracksnotes = new Array();
+        //type 为 1时,第一个track是元数据
+        var starttrack = 0;
+
+        if(midiFile.header.formatType == 1){
+          starttrack = 1;
+          var totaltime = 0;
+           for(var m = 0;m<midiFile.tracks[0].length;m++){
+               var event = midiFile.tracks[0][m];
+               totaltime += event.deltaTime;
+               if(event.subtype == "setTempo"){
+                   metadata.microsecondsPerBeat.push({"time":totaltime,beat:event.microsecondsPerBeat });
+               }else if(event.subtype == "trackName"){
+                   metadata.title.push({"time":totaltime,"title":event.text});
+               }else if(event.subtype =="timeSignature"){
+                   var timeSig = new Object();
+                   timeSig.timeSignatureString = event.numerator.toString(10)+"/"+event.denominator.toString(10);
+                   timeSig.deltaTime = totaltime;
+                   timeSig.numerator = event.numerator;
+                   timeSig.denominator = event.denominator;
+                   timeSig.metronome = event.metronome;
+                   timeSig.thirtyseconds = event.thirtyseconds;
+                   metadata.timeSigs.push(timeSig);
+               }else if(event.subtype =="keySignature"){
+                   metadata.keys.push({"time":totaltime,"key":event.key});
+               }
+           }
+        }
+        for(var i=starttrack;i<midiFile.tracks.length;i++){
+            if(midiFile.header.formatType != 1){
+                //metadata = {};//clear
+            }
+            //get metadata
+            var singeltracknote=new Array();
+            var time = 0;
+            var totaltime = 0;
+            for(var j = 0;j<midiFile.tracks[i].length;j++){
+                //getmeta
+                var event = midiFile.tracks[i][j];
+                totaltime += event.deltaTime;
+               if(event.subtype == "setTempo"){
+                   metadata.microsecondsPerBeat.push({"time":totaltime,beat:event.microsecondsPerBeat });
+               }else if(event.subtype == "trackName"){
+                   metadata.title.push({"time":totaltime,"title":event.text});
+               }else if(event.subtype =="timeSignature"){
+                   var timeSig = new Object();
+                   timeSig.timeSignatureString = event.numerator.toString(10)+"/"+event.denominator.toString(10);
+                   timeSig.time = totaltime;
+                   timeSig.deltaTime = event.deltaTime;
+                   timeSig.numerator = event.numerator;
+                   timeSig.denominator = event.denominator;
+                   timeSig.metronome = event.metronome;
+                   timeSig.thirtyseconds = event.thirtyseconds;
+                   metadata.timeSigs.push(timeSig);
+               }else if(event.subtype =="keySignature"){
+                   metadata.keys.push({"time":totaltime,"key":event.key});
+               }
+                //get note
+                if(event.type == "channel" && event.subtype == "noteOn"){
+                    var noteNumber = event.noteNumber;
+                    var channel = event.chanel;
+                    var fulltime = 0;
+                    for(var k =j+1;k<midiFile.tracks[i].length;k++){
+                      var nextevent = midiFile.tracks[i][k];
+                      fulltime += nextevent.deltaTime;
+                      if(nextevent.type == "channel" && nextevent.subtype == "noteOff" && nextevent.noteNumber == noteNumber && nextevent.channel == event.channel){
+                        break;
+                      }
+                    }
+                    var sig = new Object();
+                    sig.totaltime = totaltime;
+                    sig.fulltime = fulltime;
+                    //sig.beat = (fulltime/ticksPerBeat).toFixed(4);
+                    sig.note = notes[event.noteNumber-48];
+                    singeltracknote.push(sig);
+                }
+            }
+            tracksnotes.push(singeltracknote);
+        }
+        var outstring = "";
+        var sigidx = 0;
+        for(var i =0;i<metadata.timeSigs.length;i++){
+          var inumerator = metadata.timeSigs[i].numerator;
+          var idenominator = metadata.timeSigs[i].denominator;
+          outstring+= "Title:"+metadata.title[i].title;
+          outstring += "<br/>M:"+metadata.timeSigs[i].timeSignatureString+"<br/>";
+          var unitlen = (inumerator*4)/idenominator >= 3?8:16;
+          outstring += "L:1/"+unitlen.toString(10)+"<br/>";
+          var barsize = 2*inumerator*unitlen/idenominator;
+          var xunit =  (ticksPerBeat*metadata.timeSigs[i].thirtyseconds*4)/(8*unitlen);
+          var step = barsize;
+          var quantum = parseInt(((2.*xunit/2)),10);
+          for(;sigidx<singeltracknote.length;sigidx++){
+            if(i+1 < metadata.timeSigs.length && singeltracknote[sigidx].totaltime>metadata.timeSigs[i+1].time){
+              break;
+            }
+            var sig = singeltracknote[sigidx];
+            var playnum = parseInt((2*(sig.fulltime + (quantum/4)))/quantum,10);
+            var vnote = validnote(playnum);
+            var n = hcf(playnum,2);
+            var c = parseInt(playnum/n, 10);
+            var d = parseInt(2/n,10);
+            outstring+=sig.note;
+            if (c != 1) {
+              //fprintf(outhandle,"%d", c);
+              outstring+= c.toString();
+            }
+            if (d != 1) {
+              //fprintf(outhandle,"/%d", d);
+              outstring+= "/"+d.toString();
+            }
+            outstring+= " ";
+            step -= playnum;
+            if(step <=0){
+              outstring+="|";
+              step = barsize;
+            }
+          }
+          outstring+= "]";
+        }
+
+        //html.push('<p>', JSON.stringify(tracksnotes), '</p>');
+        //html.push('<p>', JSON.stringify(midiFile), '</p>');
+        //html.push('<p>', JSON.stringify(metadata), '</p>');//midiFile
+        html.push('<p>',outstring, '</p>');//midiFile
+        document.getElementById('list2').innerHTML = html.join('');
+      };
+      reader.readAsBinaryString(file);
+      //alert("asdf");
+    }
+
+  }
+
+  function dragOverHandler(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    e.dataTransfer.dragEffect = 'copy';
+  }
+  if (isSupportFileApi()) {
+    var drag = document.getElementById('drag');
+    drag.addEventListener('drop', dropHandler, false);
+    drag.addEventListener('dragover', dragOverHandler, false);
+  }
+})();
+    </script>
+  </body>
+
+</html>
