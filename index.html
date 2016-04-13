@@ -114,9 +114,6 @@ function hcf(m,n){//辗转相除法 求最大公约数
            }
         }
         for(var i=starttrack;i<midiFile.tracks.length;i++){
-            if(midiFile.header.formatType != 1){
-                //metadata = {};//clear
-            }
             //get metadata
             var singeltracknote=new Array();
             var time = 0;
@@ -144,6 +141,20 @@ function hcf(m,n){//辗转相除法 求最大公约数
                }
                 //get note
                 if(event.type == "channel" && event.subtype == "noteOn"){
+                    var prevsig = singeltracknote[singeltracknote.length-1];
+                    if(!prevsig && totaltime>0){
+                      var voidsig = new Object();
+                      voidsig.totaltime = totaltime;
+                      voidsig.fulltime = totaltime;
+                      voidsig.note="Z";
+                      singeltracknote.push(voidsig);
+                    }else{
+                      var voidsig = new Object();
+                      voidsig.totaltime = totaltime;
+                      voidsig.fulltime = totaltime-prevsig.totaltime;
+                      voidsig.note="Z";
+                      singeltracknote.push(voidsig);
+                    }
                     var noteNumber = event.noteNumber;
                     var channel = event.chanel;
                     var fulltime = 0;
